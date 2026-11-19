@@ -261,7 +261,7 @@
       '<header class="barra"><img class="barra-logo" src="logo.png" alt="NotebooksStore"><div class="espacio"></div>' +
       '<button id="estado-sync" class="estado-sync" data-e="off" title="Sincronizar ahora"><i></i><span></span></button>' +
       '<button class="boton boton--fant boton--icono" data-ir="/ajustes" aria-label="Ajustes">⚙️</button></header>' +
-      (conectado() ? '' : '<div class="tarjeta" style="display:flex;gap:12px;align-items:center"><img src="chip.png" alt="" style="width:64px;height:auto"><div style="flex:1"><b>Conecta tu hoja de Google</b><div class="ayuda" style="margin:2px 0 8px">Así tus cotizaciones e informes se ven en la PC y en el celular, con número correlativo, tu firma y tu sello.</div><button class="boton boton--pri boton--chico" data-ir="/ajustes">Conectar</button></div></div>') +
+      (conectado() ? '' : '<div class="tarjeta" style="display:flex;gap:12px;align-items:center"><img src="chip.png" alt="" style="width:64px;height:auto"><div style="flex:1"><b>Conecta tu hoja de Google</b><div class="ayuda" style="margin:2px 0 8px">Así tus cotizaciones e informes se ven en la PC y en el celular, con número correlativo y el sello de la tienda.</div><button class="boton boton--pri boton--chico" data-ir="/ajustes">Conectar</button></div></div>') +
       '<div class="nuevos"><button class="nuevo" data-nuevo="cotizacion"><span class="ico">🧾</span><b>Nueva cotización</b><span>Productos, precios y condiciones</span></button>' +
       '<button class="nuevo nuevo--inf" data-nuevo="informe"><span class="ico">🛠️</span><b>Nuevo informe técnico</b><span>Diagnóstico del servicio técnico</span></button></div>' +
       '<section class="tarjeta"><div class="buscar"><input class="entrada" id="buscar" type="search" placeholder="Buscar cliente, equipo, número…" autocomplete="off"></div>' +
@@ -552,8 +552,8 @@
   function pintarFirma(d) {
     var p = $('#ayuda-firma'); if (!p) return;
     var a = String(d.atendio || '').trim().toLowerCase(), es = a && a === String(cfg.firmaDe).toLowerCase();
-    p.textContent = !activos.sello ? 'Conecta tu script en Ajustes para que el PDF lleve tu sello y tu firma.'
-      : es ? 'El PDF lleva el sello y la firma de ' + cfg.firmaDe + '.' : 'El PDF lleva el sello de la tienda y el nombre "' + (d.atendio || '') + '" (sin la firma de ' + cfg.firmaDe + ').';
+    p.textContent = !activos.sello ? 'Conecta tu script en Ajustes para que el PDF lleve el sello de la tienda.'
+      : 'El PDF lleva el sello de la tienda y el nombre "' + (d.atendio || '') + '".';
   }
   function actualizarVista(d, ms) {
     if (window.innerWidth < 1100) return;
@@ -611,10 +611,9 @@
         '<label class="campo"><span>Próximo caso (informe)</span><input class="entrada" id="a-ninf" inputmode="numeric" value="' + n.informe + '"></label></div>' +
         '<button class="boton boton--suave bloque" data-acc="numeros" style="margin-top:10px">Guardar numeración</button><p class="ayuda">Los números los da tu hoja de Google, así nunca se repiten entre la PC y el celular.</p>'
         : '<p class="ayuda" style="margin:0">Conecta tu script para ver y ajustar los números.</p>') + '</section>' +
-      '<section class="tarjeta"><h2>✍️ Firma</h2><div class="campos">' +
-      '<label class="campo"><span>Nombre por defecto</span><input class="entrada" id="a-firmante" value="' + esc(cfg.firmante) + '"></label>' +
-      '<label class="campo"><span>Dueño de la firma</span><input class="entrada" id="a-firmade" value="' + esc(cfg.firmaDe) + '"></label></div>' +
-      '<p class="ayuda">Tu firma solo sale cuando "Atendido por" es ' + esc(cfg.firmaDe) + '. Si firma otra persona, sale su nombre con el sello, sin tu firma.</p>' +
+      '<section class="tarjeta"><h2>✍️ Nombre en el PDF</h2><div class="campos">' +
+      '<label class="campo campo--ancho"><span>Nombre por defecto</span><input class="entrada" id="a-firmante" value="' + esc(cfg.firmante) + '"></label>' +
+      '</div><p class="ayuda">El PDF lleva el sello de la tienda y el nombre de quien atendió. Puedes cambiarlo en cada documento.</p>' +
       (cfg.firmantes && cfg.firmantes.length > 1 ? '<div class="chips" style="margin-top:8px">' + cfg.firmantes.map(function (f) { return '<span class="chip">' + esc(f) + '</span>'; }).join('') + '<button class="chip" data-acc="limpiar-firmantes">Limpiar lista</button></div>' : '') +
       '</section>' +
       '<section class="tarjeta"><h2>🏪 Datos de la tienda (pie del PDF)</h2><div class="campos">' +
@@ -646,7 +645,7 @@
         cfg.url = url; cfg.clave = clave; guardarCfg();
         b.disabled = true; b.textContent = 'Probando…';
         var ok = await cargarActivos();
-        if (ok) { ultimaSync = 0; await sincronizar(); aviso('✅ Conectado. Tu firma y tu sello ya están listos.'); render(); }
+        if (ok) { ultimaSync = 0; await sincronizar(); aviso('✅ Conectado. El sello de la tienda ya está listo.'); render(); }
         else { aviso('No pude conectar. Revisa la dirección, la clave y que el script esté implementado para "Cualquier usuario".', true); b.disabled = false; b.textContent = 'Conectar'; }
       } else if (b.dataset.acc === 'numeros') {
         try {

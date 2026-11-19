@@ -205,7 +205,7 @@
     var cx = this.W / 2, y = this.y + 2;
     if (a.sello) { var sw = 36, sh = sw * a.selloRatio; p.addImage(a.sello, 'PNG', cx - sw / 2, y, sw, sh, 'sello', 'FAST'); y += sh; }
     if (conFirma && a.firma) { var fw = 29, fh = fw * a.firmaRatio; p.addImage(a.firma, 'PNG', cx - fw / 2 + 2, y - 4, fw, fh, 'firma', 'FAST'); y += fh - 8; }
-    else y += 12;
+    else y += 6;
     p.setDrawColor.apply(p, GRIS); p.setLineWidth(0.3); p.line(cx - 32, y, cx + 32, y);
     p.setFont('helvetica', 'bold'); p.setFontSize(10); p.setTextColor.apply(p, TINTA);
     p.text(String(nombre || '').toUpperCase(), cx, y + 5, { align: 'center' });
@@ -261,7 +261,7 @@
     }
     if (d.obs) { h.y += 2; h.parrafo('Observaciones: ' + d.obs, { tam: 9.5, color: GRIS }); }
     h.y += 6;
-    h.firma(d.atendio || cfg.firmante, (cfg.tienda && cfg.tienda.nombre) || 'Notebooks Store', esFirmante(d, cfg));
+    h.firma(d.atendio || cfg.firmante, (cfg.tienda && cfg.tienda.nombre) || 'Notebooks Store', false);
     if (cfg.mostrarChip !== false) h.chip('¡Gracias por tu preferencia!');
     return pdf;
   }
@@ -287,7 +287,7 @@
       if (d.notaOpciones) h.parrafo(d.notaOpciones, { tam: 9, color: GRIS });
     }
     h.y += 1;
-    h.firma(d.atendio || cfg.firmante, 'Notebooks Store · Soporte Técnico', esFirmante(d, cfg));
+    h.firma(d.atendio || cfg.firmante, 'Notebooks Store · Soporte Técnico', false);
     if (cfg.mostrarChip !== false) h.chip('¡Gracias por tu preferencia!');
     return pdf;
   }
