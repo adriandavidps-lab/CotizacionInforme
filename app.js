@@ -85,7 +85,13 @@
       (l.docs || []).forEach(function (rd) {
         if (pendientes[rd.id]) return; // lo local manda hasta que se suba
         if (rd.borrado) delete docs[rd.id];
-        else if (!docs[rd.id] || (rd.actualizado || 0) >= (docs[rd.id].actualizado || 0)) docs[rd.id] = rd;
+        else if (!docs[rd.id]) docs[rd.id] = rd;
+        else if ((rd.actualizado || 0) >= (docs[rd.id].actualizado || 0)) {
+          // Se actualiza el mismo objeto: así el editor abierto no pierde la referencia.
+          var loc = docs[rd.id];
+          Object.keys(loc).forEach(function (k) { delete loc[k]; });
+          Object.assign(loc, rd);
+        }
       });
       ultimaSync = l.ahora || Date.now(); ls.set('nbs:sync', ultimaSync);
       if (l.numeros) { numeros = l.numeros; ls.set('nbs:numeros', numeros); }
@@ -303,7 +309,7 @@
   function nuevo(tipo, base) {
     var d = tipo === 'informe'
       ? { id: uid('inf'), tipo: 'informe', fecha: hoy(), cliente: '', celular: '', equipo: 'Laptop', modelo: '', serie: '', diagnostico: '', procedimiento: '', final: '',
-        opciones: [{ componente: '', marca: '', capacidad: '', precio: '' }], estado: 'En revisión', atendio: cfg.firmante, creado: Date.now() }
+        opciones: [], conRepuestos: false, estado: 'En revisión', atendio: cfg.firmante, creado: Date.now() }
       : { id: uid('cot'), tipo: 'cotizacion', fecha: hoy(), titulo: cfg.titulo, cliente: '', celular: '', ciudad: cfg.tienda.ciudad,
         items: [{ cant: 1, desc: '', precio: '' }], cond: Object.assign({}, cfg.cond), obs: '', atendio: cfg.firmante, creado: Date.now() };
     if (base) Object.assign(d, base);
@@ -380,9 +386,15 @@
         html += '<section class="tarjeta"><h2><span class="num">' + s[1] + '</span>' + s[2] + '</h2><textarea class="entrada" data-k="' + s[0] + '" rows="5" placeholder="' + s[3] + '">' + esc(d[s[0]]) + '</textarea>' +
           '<div class="plant" data-plant="' + s[0] + '"></div></section>';
       });
-      html += '<section class="tarjeta"><h2><span class="num">4</span>Opciones de actualización (cotización)</h2>' +
-        '<div class="items" id="items"></div><button class="boton boton--suave boton--chico" data-acc="fila" style="margin-top:10px">+ Agregar opción</button>' +
-        '<label class="campo" style="margin-top:12px"><span>Nota debajo de la tabla (opcional)</span><input class="entrada" data-k="notaOpciones" value="' + esc(d.notaOpciones) + '" placeholder="Ej. Precios incluyen instalación y migración de datos."></label></section>';
+      var conRep = conRepuestos(d);
+      html += '<section class="tarjeta"><h2><span class="num">4</span>Repuestos recomendados</h2>' +
+        '<label class="interruptor"><span>Incluir cotización de repuestos</span><input type="checkbox" data-acc-chk="repuestos"' + (conRep ? ' checked' : '') + '></label>' +
+        '<p class="ayuda" id="rep-ayuda"' + (conRep ? ' hidden' : '') + '>Apagado: el informe sale solo con el texto del servicio realizado.</p>' +
+        '<div id="rep-cuerpo"' + (conRep ? '' : ' hidden') + '><div class="chips" style="margin:12px 0 10px">' +
+        REPUESTOS.map(function (rp) { return '<button class="chip" data-rep="' + esc(rp.n) + '">' + rp.e + ' ' + esc(rp.n) + '</button>'; }).join('') +
+        '<button class="chip" data-rep="">➕ Otro</button></div>' +
+        '<div class="items" id="items"></div>' +
+        '<label class="campo" style="margin-top:12px"><span>Nota debajo de la tabla (opcional)</span><input class="entrada" data-k="notaOpciones" value="' + esc(d.notaOpciones) + '" placeholder="Ej. Precios incluyen instalación."></label></div></section>';
     } else {
       html += '<section class="tarjeta"><h2>📦 Productos</h2><div class="items" id="items"></div>' +
         '<button class="boton boton--suave boton--chico" data-acc="fila" style="margin-top:10px">+ Agregar producto</button>' +
@@ -409,10 +421,13 @@
     pintarItems(d); pintarPlantillas(d); pintarFirma(d); pintarSync();
     actualizarVista(d, 50);
 
-    var cambio = function () { d = docs[d.id] || d; guardarDoc(d); actualizarVista(d); };
+    var cambio = function () { guardarDoc(d); actualizarVista(d); };
     app.oninput = function (e) {
       var t = e.target;
       if (t.dataset.k) { d[t.dataset.k] = t.value; if (t.dataset.k === 'atendio') pintarFirma(d); cambio(); }
+      else if (t.dataset.accChk === 'repuestos') {
+        d.conRepuestos = t.checked; $('#rep-cuerpo').hidden = !t.checked; $('#rep-ayuda').hidden = t.checked; cambio();
+      }
       else if (t.dataset.c) { d.cond = d.cond || {}; d.cond[t.dataset.c] = t.type === 'checkbox' ? t.checked : t.value; cambio(); }
       else if (t.dataset.i != null) {
         var lista = inf ? d.opciones : d.items, it = lista[Number(t.dataset.i)], k = t.dataset.ik;
@@ -439,13 +454,21 @@
       var b = e.target.closest('button'); if (!b) return;
       var acc = b.dataset.acc;
       if (acc === 'volver') ir('/');
+      else if (b.dataset.rep != null) {
+        var nombre = b.dataset.rep, vacia = d.opciones.length === 1 && !d.opciones[0].componente && !d.opciones[0].precio;
+        var fila = { componente: nombre, marca: '', capacidad: '', precio: '' };
+        if (vacia) d.opciones[0] = fila; else d.opciones.push(fila);
+        cambio(); pintarItems(d);
+        var filas = $$('#items .item--op:not(.items-cab)'), ult = filas[filas.length - 1];
+        if (ult) $(nombre ? '[data-ik="marca"]' : '[data-ik="componente"]', ult).focus();
+      }
       else if (acc === 'fila') {
         if (inf) d.opciones.push({ componente: '', marca: '', capacidad: '', precio: '' }); else d.items.push({ cant: 1, desc: '', precio: '' });
         cambio(); pintarItems(d);
         var ins = $$('#items .item:last-child input'); if (ins[0]) ins[inf ? 0 : 1].focus();
       } else if (acc === 'quitar') {
         var lista = inf ? d.opciones : d.items; lista.splice(Number(b.dataset.i), 1);
-        if (!lista.length) lista.push(inf ? { componente: '', marca: '', capacidad: '', precio: '' } : { cant: 1, desc: '', precio: '' });
+        if (!lista.length && !inf) lista.push({ cant: 1, desc: '', precio: '' });
         cambio(); pintarItems(d);
       } else if (acc === 'ver') verPDF(docs[d.id] || d);
       else if (acc === 'enviar') enviar(docs[d.id] || d);
@@ -462,20 +485,37 @@
       }
     };
   }
+  var REPUESTOS = [
+    { n: 'Pantalla', e: '🖥️', m: 'Ej. LG / AUO', d: 'Ej. 15.6" HD 30 pines' },
+    { n: 'Teclado', e: '⌨️', m: 'Ej. Original HP', d: 'Ej. Español, retroiluminado' },
+    { n: 'Unidad de Estado Sólido (SSD)', e: '💾', m: 'Ej. Kingston', d: 'Ej. 480 GB SATA' },
+    { n: 'Memoria RAM', e: '🧠', m: 'Ej. Crucial', d: 'Ej. 8 GB DDR4 3200' },
+    { n: 'Batería', e: '🔋', m: 'Ej. Compatible', d: 'Ej. 4 celdas 41Wh' },
+    { n: 'Cargador', e: '🔌', m: 'Ej. Original Dell', d: 'Ej. 19.5V 3.34A 65W' },
+  ];
+  function ejemplo(comp, tipo) {
+    var rp = REPUESTOS.find(function (x) { return x.n.toLowerCase() === String(comp || '').toLowerCase(); });
+    return rp ? rp[tipo] : (tipo === 'm' ? 'Marca / modelo' : 'Detalle');
+  }
+  function conRepuestos(d) {
+    if (d.conRepuestos != null) return !!d.conRepuestos;
+    return (d.opciones || []).some(function (o) { return o.componente || o.precio; }); // informes viejos
+  }
   function pintarItems(d) {
     var inf = d.tipo === 'informe', cont = $('#items'), prods = productos();
     $('#dl-productos').innerHTML = Object.keys(prods).slice(0, 300).map(function (k) { return '<option value="' + esc(prods[k].desc) + '">' + esc(bs(prods[k].precio)) + '</option>'; }).join('');
     if (inf) {
-      cont.innerHTML = '<div class="item item--op items-cab"><span>Componente</span><span>Marca</span><span>Capacidad</span><span>Precio Bs</span><span></span></div>' +
+      if (!d.opciones.length) { cont.innerHTML = '<p class="ayuda" style="margin:0">Toca el repuesto que hay que cambiar. Puedes agregar varios.</p>'; return; }
+      cont.innerHTML = '<div class="item item--op items-cab"><span>Repuesto</span><span>Marca / modelo</span><span>Detalle</span><span>Precio Bs</span><span></span></div>' +
         d.opciones.map(function (o, i) {
           return '<div class="item item--op">' +
-            '<input class="entrada" data-i="' + i + '" data-ik="componente" value="' + esc(o.componente) + '" placeholder="Ej. Unidad de Estado Sólido (SSD)" list="dl-componentes">' +
-            '<input class="entrada" data-i="' + i + '" data-ik="marca" value="' + esc(o.marca) + '" placeholder="Marca">' +
-            '<input class="entrada" data-i="' + i + '" data-ik="capacidad" value="' + esc(o.capacidad) + '" placeholder="Ej. 480 GB">' +
+            '<input class="entrada" data-i="' + i + '" data-ik="componente" value="' + esc(o.componente) + '" placeholder="Repuesto" list="dl-componentes">' +
+            '<input class="entrada" data-i="' + i + '" data-ik="marca" value="' + esc(o.marca) + '" placeholder="' + esc(ejemplo(o.componente, 'm')) + '">' +
+            '<input class="entrada" data-i="' + i + '" data-ik="capacidad" value="' + esc(o.capacidad) + '" placeholder="' + esc(ejemplo(o.componente, 'd')) + '">' +
             '<input class="entrada" data-i="' + i + '" data-ik="precio" value="' + esc(o.precio) + '" inputmode="decimal" placeholder="0">' +
             '<button class="quitar" data-acc="quitar" data-i="' + i + '" aria-label="Quitar opción">✕</button></div>';
         }).join('') +
-        '<datalist id="dl-componentes"><option>Unidad de Estado Sólido (SSD)</option><option>SSD M.2 NVMe</option><option>Memoria RAM</option><option>Batería</option><option>Pantalla</option><option>Teclado</option><option>Cargador</option><option>Pasta térmica y mantenimiento</option></datalist>';
+        '<datalist id="dl-componentes">' + REPUESTOS.map(function (rp) { return '<option>' + esc(rp.n) + '</option>'; }).join('') + '<option>SSD M.2 NVMe</option><option>Pasta térmica y mantenimiento</option><option>Bisagras</option><option>Ventilador</option><option>Puerto de carga</option></datalist>';
     } else {
       cont.innerHTML = '<div class="item items-cab"><span>Cant.</span><span>Descripción</span><span>Precio unit.</span><span></span></div>' +
         d.items.map(function (it, i) {
@@ -531,7 +571,7 @@
     var h = hoja('Opciones',
       '<div class="pila" style="gap:2px">' +
       '<button class="menu-op" data-m="descargar">⬇️ Descargar PDF</button>' +
-      (inf ? '<button class="menu-op" data-m="acot">🧾 Crear cotización con estas opciones</button>' : '') +
+      (inf && conRepuestos(d) ? '<button class="menu-op" data-m="acot">🧾 Crear cotización con estos repuestos</button>' : '') +
       '<button class="menu-op" data-m="duplicar">📄 Duplicar (nuevo número)</button>' +
       '<button class="menu-op menu-op--peligro" data-m="borrar">🗑️ Borrar</button></div>');
     h.el.onclick = function (e) {

@@ -281,9 +281,10 @@
       n++; h.seccion(n, s[0]); h.parrafo(s[1], { justificar: true, tam: 9.8 }); h.y += 3;
     });
     var ops = (d.opciones || []).filter(function (o) { return o.componente || o.precio; });
-    if (ops.length) {
-      n++; h.seccion(n, 'Opciones de actualización (cotización)');
-      h.tabla([{ t: 'Componente recomendado' }, { t: 'Marca', w: 30 }, { t: 'Capacidad', w: 28, a: 'center' }, { t: 'Precio', w: 30, a: 'right', negrita: true }],
+    var incluir = d.conRepuestos != null ? !!d.conRepuestos : ops.length > 0;
+    if (incluir && ops.length) {
+      n++; h.seccion(n, 'Repuestos recomendados (cotización)');
+      h.tabla([{ t: 'Repuesto' }, { t: 'Marca / modelo', w: 38 }, { t: 'Detalle', w: 40 }, { t: 'Precio', w: 28, a: 'right', negrita: true }],
         ops.map(function (o) { return [o.componente, o.marca, o.capacidad, o.precio ? bs(o.precio) : '']; }));
       if (d.notaOpciones) h.parrafo(d.notaOpciones, { tam: 9, color: GRIS });
     }
