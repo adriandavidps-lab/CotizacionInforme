@@ -219,10 +219,8 @@
     var w = 24, h = w * a.chipRatio, x = this.M - 2, y = this.H - 16 - h;
     if (this.y > y - 2) return; // no tapar contenido
     p.addImage(a.chip, 'PNG', x, y, w, h, 'chip', 'FAST');
-    p.setFont('helvetica', 'bold'); p.setFontSize(9); p.setTextColor.apply(p, AZUL);
-    p.text(texto, x + w + 1, y + h * 0.45);
-    p.setFont('helvetica', 'normal'); p.setFontSize(8); p.setTextColor.apply(p, GRIS);
-    p.text('notebooksstore.com', x + w + 1, y + h * 0.45 + 4.2);
+    p.setFont('helvetica', 'bold'); p.setFontSize(10); p.setTextColor.apply(p, AZUL);
+    p.text(texto, x + w + 1.5, y + h * 0.55);
   };
 
   function numeroCot(d) { return d.numero ? 'N° COT-' + String(d.numero).padStart(4, '0') : 'Sin número'; }
@@ -264,7 +262,7 @@
     if (d.obs) { h.y += 2; h.parrafo('Observaciones: ' + d.obs, { tam: 9.5, color: GRIS }); }
     h.y += 6;
     h.firma(d.atendio || cfg.firmante, (cfg.tienda && cfg.tienda.nombre) || 'Notebooks Store', esFirmante(d, cfg));
-    if (cfg.mostrarChip !== false) h.chip('¡Gracias por su preferencia!');
+    if (cfg.mostrarChip !== false) h.chip('¡Gracias por tu preferencia!');
     return pdf;
   }
 
@@ -290,7 +288,7 @@
     }
     h.y += 1;
     h.firma(d.atendio || cfg.firmante, 'Notebooks Store · Soporte Técnico', esFirmante(d, cfg));
-    if (cfg.mostrarChip !== false) h.chip('Gracias por confiar en nosotros');
+    if (cfg.mostrarChip !== false) h.chip('¡Gracias por tu preferencia!');
     return pdf;
   }
 
