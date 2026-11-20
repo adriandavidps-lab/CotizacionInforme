@@ -238,6 +238,8 @@
     pintarSync();
     var m = ruta().match(/^\/(cot|inf)\/(.+)$/), n = $('#ed-num');
     if (m && n && docs[m[2]]) n.textContent = window.NBSpdf.numeroTexto(docs[m[2]]);
+    var ic = $('[data-caso]');
+    if (m && ic && docs[m[2]] && document.activeElement !== ic && !docs[m[2]].caso) ic.value = docs[m[2]].numero || '';
   }
 
   function render() {
@@ -289,7 +291,7 @@
       .filter(function (d) { return (d.tipo === 'cotizacion' || d.tipo === 'informe') && (filtro === 'todos' || d.tipo === filtro); })
       .filter(function (d) {
         if (!q) return true;
-        var t = [d.cliente, d.celular, d.equipo, d.modelo, d.serie, d.numero, window.NBSpdf.numeroTexto(d), (d.items || []).map(function (i) { return i.desc; }).join(' ')].join(' ').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        var t = [d.cliente, d.celular, d.equipo, d.modelo, d.serie, d.numero, d.caso, window.NBSpdf.numeroTexto(d), (d.items || []).map(function (i) { return i.desc; }).join(' ')].join(' ').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
         return t.indexOf(q) >= 0;
       })
       .sort(function (a, b) { return (b.fecha || '').localeCompare(a.fecha || '') || (b.creado || 0) - (a.creado || 0); });
@@ -372,6 +374,7 @@
       campo('cliente', 'Nombre o empresa', 'text', 'autocomplete="off" placeholder="Ej. UMSA, Juan Pérez"', true) +
       campo('celular', 'Celular (WhatsApp)', 'tel', 'inputmode="tel" placeholder="7XXXXXXX"') +
       campo('fecha', 'Fecha', 'date') +
+      (inf ? '<label class="campo"><span>N° de caso</span><input class="entrada" data-caso="1" inputmode="numeric" value="' + esc(d.caso || d.numero || '') + '" placeholder="' + (d.numero ? d.numero : 'Se asigna solo') + '"></label>' : '') +
       (inf ? '' : campo('ciudad', 'Ciudad', 'text')) +
       (inf ? '' : '<label class="campo"><span>Título del documento</span><select class="entrada" data-k="titulo">' + ['Cotización', 'Nota de entrega', 'Proforma'].map(function (t) { return '<option' + (d.titulo === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></label>') +
       '</div></section>';
@@ -445,6 +448,15 @@
         var lista = inf ? d.opciones : d.items, it = lista[Number(t.dataset.i)];
         it[t.dataset.ik] = num(t.value) || (t.dataset.ik === 'cant' ? 1 : '');
         t.value = it[t.dataset.ik]; if (!inf) pintarTotal(d); cambio();
+      }
+      if (t.dataset.caso) {
+        var nc = Math.floor(num(t.value));
+        if (nc >= 1) d.caso = nc; else { delete d.caso; t.value = d.numero || ''; }
+        cambio(); var en = $('#ed-num'); if (en) en.textContent = window.NBSpdf.numeroTexto(d);
+        // que el siguiente informe siga desde este número
+        if (nc >= 1 && conectado() && (!numeros || nc >= (numeros.informe || 0) + 1)) {
+          api({ accion: 'numeros', numeros: { informe: nc + 1 } }).then(function (r) { numeros = r.numeros; ls.set('nbs:numeros', numeros); }).catch(function () {});
+        }
       }
       if (t.dataset.k === 'titulo') { $('.barra h1').textContent = t.value; }
       if (t.dataset.k === 'atendio') {
@@ -608,8 +620,8 @@
       '<button class="boton boton--pri bloque" data-acc="conectar" style="margin-top:12px">' + (conectado() ? 'Guardar y probar' : 'Conectar') + '</button>' +
       '<p class="ayuda">La dirección y la clave se guardan solo en este equipo. Hazlo una vez en la PC y otra en el celular.</p></section>' +
       '<section class="tarjeta"><h2>🔢 Numeración</h2>' + (n ? '<div class="campos">' +
-        '<label class="campo"><span>Próxima cotización (COT-)</span><input class="entrada" id="a-ncot" inputmode="numeric" value="' + n.cotizacion + '"></label>' +
-        '<label class="campo"><span>Próximo caso (informe)</span><input class="entrada" id="a-ninf" inputmode="numeric" value="' + n.informe + '"></label></div>' +
+        '<label class="campo"><span>Próxima cotización (COT-)</span><input class="entrada" id="a-ncot" inputmode="numeric" value="' + n.cotizacion + '"></label></div>' +
+        '<p class="ayuda">El N° de caso de los informes se cambia dentro de cada informe.</p>' +
         '<button class="boton boton--suave bloque" data-acc="numeros" style="margin-top:10px">Guardar numeración</button><p class="ayuda">Los números los da tu hoja de Google, así nunca se repiten entre la PC y el celular.</p>'
         : '<p class="ayuda" style="margin:0">Conecta tu script para ver y ajustar los números.</p>') + '</section>' +
       '<section class="tarjeta"><h2>✍️ Nombre en el PDF</h2><div class="campos">' +
@@ -655,7 +667,7 @@
         else { aviso('No pude conectar. Revisa la dirección, la clave y que el script esté implementado para "Cualquier usuario".', true); b.disabled = false; b.textContent = 'Conectar'; }
       } else if (b.dataset.acc === 'numeros') {
         try {
-          var r = await api({ accion: 'numeros', numeros: { cotizacion: num($('#a-ncot').value), informe: num($('#a-ninf').value) } });
+          var r = await api({ accion: 'numeros', numeros: { cotizacion: num($('#a-ncot').value) } });
           numeros = r.numeros; ls.set('nbs:numeros', numeros); aviso('Numeración guardada.');
         } catch (err) { aviso('No pude guardar la numeración (sin conexión).', true); }
       } else if (b.dataset.acc === 'invitar') invitar();

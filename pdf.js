@@ -224,7 +224,8 @@
   };
 
   function numeroCot(d) { return d.numero ? 'N° COT-' + String(d.numero).padStart(4, '0') : 'Sin número'; }
-  function numeroInf(d) { return d.numero ? 'Caso #' + d.numero : 'Caso sin número'; }
+  function casoDe(d) { return d.caso || d.numero || ''; }
+  function numeroInf(d) { return casoDe(d) ? 'Caso #' + casoDe(d) : 'Caso sin número'; }
 
   function cotizacion(d, a, cfg) {
     var pdf = nuevoDoc();
@@ -268,7 +269,7 @@
 
   function informe(d, a, cfg) {
     var pdf = nuevoDoc();
-    var h = new Hoja(pdf, a, { titulo: 'INFORME TÉCNICO', numero: numeroInf(d), fecha: fechaLarga(d.fecha, 'La Paz'), tienda: cfg.tienda, borrador: !d.numero,
+    var h = new Hoja(pdf, a, { titulo: 'INFORME TÉCNICO', numero: numeroInf(d), fecha: fechaLarga(d.fecha, 'La Paz'), tienda: cfg.tienda, borrador: !casoDe(d),
       pie: 'Notebooks Store  ·  Soporte Técnico' + (cfg.tienda && cfg.tienda.tel ? '  ·  Tel. ' + cfg.tienda.tel : '') + (cfg.tienda && cfg.tienda.dir ? '  ·  ' + cfg.tienda.dir : '') });
     h.nuevaPagina();
     h.cajaDatos([['Cliente', d.cliente], ['Celular', d.celular], ['Tipo de equipo', d.equipo], ['Marca / modelo', d.modelo], ['N° de serie', d.serie], ['Estado', d.estado]]);
@@ -300,7 +301,7 @@
   window.NBSpdf = {
     generar: function (d, activos, cfg) { return d.tipo === 'informe' ? informe(d, activos, cfg) : cotizacion(d, activos, cfg); },
     nombreArchivo: function (d) {
-      var base = d.tipo === 'informe' ? 'Informe_caso_' + (d.numero || 'borrador') : 'Cotizacion_' + (d.numero ? 'COT-' + String(d.numero).padStart(4, '0') : 'borrador');
+      var base = d.tipo === 'informe' ? 'Informe_caso_' + (casoDe(d) || 'borrador') : 'Cotizacion_' + (d.numero ? 'COT-' + String(d.numero).padStart(4, '0') : 'borrador');
       var cli = String(d.cliente || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30);
       return base + (cli ? '_' + cli : '') + '.pdf';
     },
