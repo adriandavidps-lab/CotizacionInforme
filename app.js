@@ -251,6 +251,7 @@
       if (!d) { vistaActual = null; ir('/'); return; }
       vistaActual = 'editor'; app.classList.add('app--ancha'); editor(d); return;
     }
+    if (r !== '/' && r !== '') { seleccionando = false; elegidos = {}; }
     if (r === '/ajustes') { vistaActual = 'ajustes'; ajustes(); return; }
     if (r.indexOf('/unirse') === 0) { vistaActual = 'unirse'; unirse(r); return; }
     vistaActual = 'inicio'; inicio();
@@ -258,6 +259,7 @@
 
   // ===================================================================== inicio
   var filtro = ls.get('nbs:filtro', 'todos'), busqueda = '';
+  var seleccionando = false, elegidos = {};
   function inicio() {
     var app = $('#app');
     app.innerHTML =
@@ -270,7 +272,11 @@
       '<section class="tarjeta"><div class="buscar"><input class="entrada" id="buscar" type="search" placeholder="Buscar cliente, equipo, número…" autocomplete="off"></div>' +
       '<div class="chips" style="margin-bottom:6px">' + [['todos', 'Todos'], ['cotizacion', 'Cotizaciones'], ['informe', 'Informes']].map(function (f) {
         return '<button class="chip" data-filtro="' + f[0] + '" aria-pressed="' + (filtro === f[0]) + '">' + f[1] + '</button>';
-      }).join('') + '</div><div class="lista" id="lista"></div></section>';
+      }).join('') + '<span class="espacio"></span><button class="chip chip--sel" data-acc="sel" aria-pressed="' + seleccionando + '">' + (seleccionando ? 'Cancelar' : '☑️ Seleccionar') + '</button></div>' +
+      '<div class="lista" id="lista"></div></section>' +
+      '<div class="acciones" id="barra-sel"' + (seleccionando ? '' : ' hidden') + '><div class="acciones-in">' +
+      '<button class="boton boton--fant" data-acc="sel-todo">Todos</button>' +
+      '<button class="boton boton--borrar" data-acc="sel-borrar" disabled>🗑️ Borrar</button></div></div>';
     $('#buscar').value = busqueda;
     $('#buscar').addEventListener('input', function (e) { busqueda = e.target.value; pintarLista(); });
     app.onclick = function (e) {
@@ -279,6 +285,22 @@
       else if (b.id === 'estado-sync') { if (conectado()) sincronizar(); else ir('/ajustes'); }
       else if (b.dataset.nuevo) nuevo(b.dataset.nuevo);
       else if (b.dataset.filtro) { filtro = b.dataset.filtro; ls.set('nbs:filtro', filtro); $$('[data-filtro]').forEach(function (x) { x.setAttribute('aria-pressed', x === b); }); pintarLista(); }
+      else if (b.dataset.acc === 'sel') { seleccionando = !seleccionando; elegidos = {}; inicio(); }
+      else if (b.dataset.acc === 'sel-todo') {
+        var vis = $$('#lista [data-elegir]').map(function (x) { return x.dataset.elegir; });
+        var todos = vis.length && vis.every(function (id) { return elegidos[id]; });
+        vis.forEach(function (id) { if (todos) delete elegidos[id]; else elegidos[id] = true; });
+        pintarLista();
+      }
+      else if (b.dataset.acc === 'sel-borrar') {
+        var ids = Object.keys(elegidos).filter(function (id) { return docs[id]; });
+        if (!ids.length) return;
+        if (!window.confirm('¿Borrar ' + ids.length + (ids.length === 1 ? ' documento' : ' documentos') + '? Se borra en todos los equipos y no se puede deshacer.')) return;
+        ids.forEach(borrarDoc);
+        seleccionando = false; elegidos = {}; inicio();
+        aviso(ids.length === 1 ? 'Documento borrado.' : ids.length + ' documentos borrados.');
+      }
+      else if (b.dataset.elegir) { var id = b.dataset.elegir; if (elegidos[id]) delete elegidos[id]; else elegidos[id] = true; pintarLista(); }
       else if (b.dataset.abrir) { var d = docs[b.dataset.abrir]; if (d) ir('/' + (d.tipo === 'informe' ? 'inf' : 'cot') + '/' + d.id); }
     };
     pintarSync(); pintarLista();
@@ -305,10 +327,15 @@
       if (d.atendio && String(d.atendio).trim().toLowerCase() !== String(cfg.firmante).trim().toLowerCase()) t2 += ' · por ' + d.atendio;
       var est = inf ? '<span class="etiqueta ' + (d.estado === 'Entregado' ? 'etiqueta--gris' : d.estado === 'Listo' ? 'etiqueta--verde' : 'etiqueta--ambar') + '">' + esc(d.estado || 'En revisión') + '</span>'
         : (d.enviado ? '<span class="etiqueta etiqueta--verde">Enviada</span>' : '');
-      return '<button class="fila-doc" data-abrir="' + esc(d.id) + '"><span class="ico">' + (inf ? '🛠️' : '🧾') + '</span><span class="txt">' +
+      var sel = !!elegidos[d.id];
+      return '<button class="fila-doc' + (sel ? ' fila-doc--elegida' : '') + '" ' + (seleccionando ? 'data-elegir="' + esc(d.id) + '" aria-pressed="' + sel + '"' : 'data-abrir="' + esc(d.id) + '"') + '>' +
+        (seleccionando ? '<span class="marca' + (sel ? ' marca--si' : '') + '">' + (sel ? '✓' : '') + '</span>' : '') +
+        '<span class="ico">' + (inf ? '🛠️' : '🧾') + '</span><span class="txt">' +
         '<span class="t1">' + esc(d.cliente || 'Sin cliente') + '</span><span class="t2">' + esc(window.NBSpdf.numeroTexto(d)) + ' · ' + esc(t2) + '</span></span>' +
         '<span class="der">' + (inf ? '' : '<b>' + esc(bs(totalDe(d))) + '</b>') + esc(fechaCorta(d.fecha)) + '<br>' + est + '</span></button>';
     }).join('');
+    var n = Object.keys(elegidos).length, bb = $('[data-acc="sel-borrar"]');
+    if (bb) { bb.disabled = !n; bb.textContent = n ? '🗑️ Borrar (' + n + ')' : '🗑️ Borrar'; }
   }
   function nuevo(tipo, base) {
     var d = tipo === 'informe'

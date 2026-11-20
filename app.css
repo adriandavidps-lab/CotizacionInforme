@@ -175,3 +175,12 @@ select.entrada{appearance:auto}
   .barra-logo{height:46px}
   .nuevo{padding:14px 12px}
 }
+
+/* Selección para borrar */
+.chips .espacio{flex:1}
+.chip--sel{background:transparent;border-style:dashed}
+.chip--sel[aria-pressed=true]{background:var(--rosa-suave);color:var(--rosa);border-color:transparent}
+.marca{flex:none;width:24px;height:24px;border-radius:50%;border:2px solid var(--borde);display:grid;place-items:center;font-weight:800;color:#fff;font-size:.8rem}
+.marca--si{background:var(--rosa);border-color:transparent}
+.fila-doc--elegida{background:var(--rosa-suave);border-radius:12px}
+.boton--borrar{background:linear-gradient(135deg,#ef6a80,#d43f5a);color:#fff;border-color:transparent;box-shadow:0 8px 20px rgba(212,63,90,.32)}
