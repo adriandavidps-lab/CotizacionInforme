@@ -112,7 +112,7 @@
       var r = await api({ accion: 'config' });
       activos = { firma: r.firma || '', sello: r.sello || '', cuando: Date.now() }; ls.set('nbs:activos', activos);
       if (r.numeros) { numeros = r.numeros; ls.set('nbs:numeros', numeros); }
-      imgs.firma = imgs.sello = null; await prepararImagenes();
+      await prepararImagenes();
       return true;
     } catch (e) { return false; }
   }
@@ -146,7 +146,7 @@
     if (!imgs.logo) imgs.logo = await cargarImg('logo.png');
     if (!imgs.chip) imgs.chip = await cargarImg('chip.png');
     if (!imgs.firma && activos.firma) imgs.firma = await cargarImg(activos.firma);
-    if (!imgs.sello && activos.sello) imgs.sello = await cargarImg(activos.sello);
+    if (!imgs.sello) imgs.sello = await cargarImg('sello.png');
   }
   function activosPDF() {
     var r = {};
@@ -250,6 +250,7 @@
       vistaActual = 'editor'; app.classList.add('app--ancha'); editor(d); return;
     }
     if (r === '/ajustes') { vistaActual = 'ajustes'; ajustes(); return; }
+    if (r.indexOf('/unirse') === 0) { vistaActual = 'unirse'; unirse(r); return; }
     vistaActual = 'inicio'; inicio();
   }
 
@@ -299,6 +300,7 @@
     cont.innerHTML = lista.slice(0, 200).map(function (d) {
       var inf = d.tipo === 'informe';
       var t2 = inf ? [d.equipo, d.modelo].filter(Boolean).join(' · ') || 'Sin equipo' : ((d.items || []).filter(function (i) { return i.desc; }).length + ' ítem(s)');
+      if (d.atendio && String(d.atendio).trim().toLowerCase() !== String(cfg.firmante).trim().toLowerCase()) t2 += ' · por ' + d.atendio;
       var est = inf ? '<span class="etiqueta ' + (d.estado === 'Entregado' ? 'etiqueta--gris' : d.estado === 'Listo' ? 'etiqueta--verde' : 'etiqueta--ambar') + '">' + esc(d.estado || 'En revisión') + '</span>'
         : (d.enviado ? '<span class="etiqueta etiqueta--verde">Enviada</span>' : '');
       return '<button class="fila-doc" data-abrir="' + esc(d.id) + '"><span class="ico">' + (inf ? '🛠️' : '🧾') + '</span><span class="txt">' +
@@ -552,8 +554,7 @@
   function pintarFirma(d) {
     var p = $('#ayuda-firma'); if (!p) return;
     var a = String(d.atendio || '').trim().toLowerCase(), es = a && a === String(cfg.firmaDe).toLowerCase();
-    p.textContent = !activos.sello ? 'Conecta tu script en Ajustes para que el PDF lleve el sello de la tienda.'
-      : 'El PDF lleva el sello de la tienda y el nombre "' + (d.atendio || '') + '".';
+    p.textContent = 'El PDF lleva el sello de la tienda y el nombre "' + (d.atendio || '') + '".';
   }
   function actualizarVista(d, ms) {
     if (window.innerWidth < 1100) return;
@@ -616,6 +617,11 @@
       '</div><p class="ayuda">El PDF lleva el sello de la tienda y el nombre de quien atendió. Puedes cambiarlo en cada documento.</p>' +
       (cfg.firmantes && cfg.firmantes.length > 1 ? '<div class="chips" style="margin-top:8px">' + cfg.firmantes.map(function (f) { return '<span class="chip">' + esc(f) + '</span>'; }).join('') + '<button class="chip" data-acc="limpiar-firmantes">Limpiar lista</button></div>' : '') +
       '</section>' +
+      '<section class="tarjeta"><h2>👥 Compañeros de trabajo</h2>' +
+      (conectado() ? '<p class="ayuda" style="margin:0 0 10px">Mándales este enlace por WhatsApp. Al abrirlo ponen su nombre y quedan conectados a la misma hoja: misma numeración e historial, y cada documento sale con el nombre de quien lo hizo.</p>' +
+        '<button class="boton boton--wa bloque" data-acc="invitar">Invitar a un compañero</button>' +
+        '<p class="ayuda">El enlace lleva la clave de tu hoja: compártelo solo con tu equipo. Si alguien deja de trabajar contigo, cambia la clave en tu script y vuelve a invitar a los demás.</p>'
+        : '<p class="ayuda" style="margin:0">Primero conecta tu hoja de Google; después podrás invitar a tus compañeros.</p>') + '</section>' +
       '<section class="tarjeta"><h2>🏪 Datos de la tienda (pie del PDF)</h2><div class="campos">' +
       ['nombre:Nombre', 'tel:Teléfono', 'dir:Dirección', 'ciudad:Ciudad'].map(function (x) { var p = x.split(':'); return '<label class="campo"><span>' + p[1] + '</span><input class="entrada" data-t="' + p[0] + '" value="' + esc(cfg.tienda[p[0]]) + '"></label>'; }).join('') + '</div></section>' +
       '<section class="tarjeta"><h2>📝 Condiciones por defecto (cotización)</h2><div class="campos">' +
@@ -652,8 +658,54 @@
           var r = await api({ accion: 'numeros', numeros: { cotizacion: num($('#a-ncot').value), informe: num($('#a-ninf').value) } });
           numeros = r.numeros; ls.set('nbs:numeros', numeros); aviso('Numeración guardada.');
         } catch (err) { aviso('No pude guardar la numeración (sin conexión).', true); }
-      } else if (b.dataset.acc === 'limpiar-firmantes') { cfg.firmantes = [cfg.firmante]; guardarCfg(); ajustes(); }
+      } else if (b.dataset.acc === 'invitar') invitar();
+      else if (b.dataset.acc === 'limpiar-firmantes') { cfg.firmantes = [cfg.firmante]; guardarCfg(); ajustes(); }
       else if (b.id === 'estado-sync') sincronizar();
+    };
+  }
+
+  // ===================================================================== equipo: invitar y unirse
+  function enlaceInvitacion() {
+    return location.origin + location.pathname + '#/unirse?u=' + encodeURIComponent(cfg.url) + '&k=' + encodeURIComponent(cfg.clave);
+  }
+  async function invitar() {
+    var enlace = enlaceInvitacion();
+    var texto = 'Te paso la app de cotizaciones e informes técnicos de Notebooks Store. Ábrela, pon tu nombre y listo:';
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Cotizador NotebooksStore', text: texto, url: enlace }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(texto + ' ' + enlace); aviso('Enlace copiado. Pégalo en el chat de tu compañero.'); }
+    catch (e) { window.prompt('Copia este enlace y mándalo por WhatsApp:', enlace); }
+  }
+  function unirse(r) {
+    var q = {};
+    (r.split('?')[1] || '').split('&').forEach(function (par) { var i = par.indexOf('='); if (i > 0) q[par.slice(0, i)] = decodeURIComponent(par.slice(i + 1)); });
+    if (!q.u || !q.k) { ir('/'); return; }
+    var app = $('#app');
+    app.innerHTML = '<div class="tarjeta" style="max-width:460px;margin:8vh auto 0;text-align:center">' +
+      '<img src="chip.png" alt="" style="width:130px;height:auto;margin-bottom:4px">' +
+      '<h1 style="margin:0 0 6px;font-size:1.3rem">¡Bienvenido al equipo!</h1>' +
+      '<p class="ayuda" style="margin:0 0 16px;font-size:.9rem">Te invitaron a la app de cotizaciones e informes de Notebooks Store. Escribe tu nombre como quieres que salga en los PDF.</p>' +
+      '<label class="campo" style="text-align:left"><span>Tu nombre</span><input class="entrada" id="u-nombre" autocomplete="name" placeholder="Ej. Luis Quispe" value="' +
+      esc(cfg.url === q.u && cfg.firmante !== CFG_DEF.firmante ? cfg.firmante : '') + '"></label>' +
+      '<button class="boton boton--pri bloque" id="u-entrar" style="margin-top:14px">Entrar</button></div>';
+    var inp = $('#u-nombre'); setTimeout(function () { inp.focus(); }, 60);
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') $('#u-entrar').click(); });
+    $('#u-entrar').onclick = async function () {
+      var nombre = inp.value.trim().replace(/\s+/g, ' ');
+      if (nombre.length < 2) { aviso('Escribe tu nombre.', true); inp.focus(); return; }
+      var b = this; b.disabled = true; b.textContent = 'Conectando…';
+      cfg.url = q.u; cfg.clave = q.k; cfg.firmante = nombre;
+      cfg.firmantes = [nombre].concat((cfg.firmantes || []).filter(function (f) { return f !== nombre && f !== CFG_DEF.firmante; })).slice(0, 12);
+      guardarCfg();
+      ultimaSync = 0; ls.set('nbs:sync', 0);
+      var ok = await cargarActivos();
+      if (!ok) { b.disabled = false; b.textContent = 'Entrar'; aviso('No pude conectar. Pide a quien te invitó un enlace nuevo.', true); return; }
+      await sincronizar();
+      history.replaceState(null, '', location.pathname + '#/');
+      render();
+      aviso('✅ Listo, ' + nombre.split(' ')[0] + '. Instálala desde el menú del navegador: "Instalar" o "Añadir a pantalla de inicio".');
     };
   }
 
