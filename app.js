@@ -51,11 +51,39 @@
   var estadoSync = 'off', sincronizando = false, temporizador = null;
   function conectado() { return !!(cfg.url && cfg.clave); }
   async function api(cuerpo) {
-    var res = await fetch(cfg.url, { method: 'POST', body: JSON.stringify(Object.assign({ clave: cfg.clave }, cuerpo)), redirect: 'follow' });
-    var datos = await res.json();
-    if (datos.error) { var e = new Error(datos.error); e.codigo = datos.error; throw e; }
+    var res;
+    try {
+      res = await fetch(cfg.url, { method: 'POST', body: JSON.stringify(Object.assign({ clave: cfg.clave }, cuerpo)), redirect: 'follow' });
+    } catch (e) {
+      var er = new Error('red'); er.codigo = navigator.onLine === false ? 'sin_internet' : 'red'; throw er;
+    }
+    var texto = await res.text(), datos = null;
+    try { datos = JSON.parse(texto); } catch (e) {
+      var er2 = new Error('respuesta');
+      er2.codigo = /accounts\.google|ServiceLogin|Iniciar sesi|Sign in/i.test(texto) ? 'login'
+        : /Script function not found|doPost/i.test(texto) ? 'sin_doPost'
+        : /authoriz|autoriz|permiso/i.test(texto) ? 'permiso'
+        : res.status === 404 ? 'no_existe' : 'respuesta';
+      er2.detalle = 'HTTP ' + res.status;
+      throw er2;
+    }
+    if (datos.error) { var e3 = new Error(datos.error); e3.codigo = datos.error; e3.detalle = datos.detalle || ''; throw e3; }
     return datos;
   }
+  var ultimoError = null;
+  function explicarError(e) {
+    var c = e && e.codigo;
+    if (c === 'sin_internet') return 'Este equipo no tiene internet.';
+    if (c === 'red') return 'No se pudo llegar a tu script de Google. Revisa la dirección en Ajustes (debe terminar en /exec).';
+    if (c === 'login') return 'Google está pidiendo iniciar sesión: el script quedó implementado con acceso restringido. En el script: Implementar → Gestionar implementaciones → ✏️ → "Quién tiene acceso: Cualquier usuario".';
+    if (c === 'permiso') return 'Google pide volver a dar permiso al script. Ábrelo, ejecuta "probar" y acepta los permisos.';
+    if (c === 'sin_doPost') return 'El código del script está incompleto. Vuelve a pegar el código completo de Codigo-Cotizador.gs y reimplementa.';
+    if (c === 'no_existe') return 'Esa dirección del script ya no existe (quizá se creó una implementación nueva). Copia la URL /exec actual y pégala en Ajustes.';
+    if (c === 'clave') return 'La clave no coincide con la de tu script. Revisa Ajustes.';
+    if (c === 'interno') return 'El script respondió con un error: ' + (e.detalle || '') + '.';
+    return 'Error al sincronizar (' + (c || 'desconocido') + (e && e.detalle ? ', ' + e.detalle : '') + ').';
+  }
+
   function pintarSync() {
     var el = $('#estado-sync'); if (!el) return;
     var n = Object.keys(pendientes).length + Object.keys(porBorrar).length;
@@ -99,8 +127,8 @@
       estadoSync = 'ok';
       if (!activos.firma || !activos.cuando || Date.now() - activos.cuando > 7 * 864e5) cargarActivos();
     } catch (e) {
-      estadoSync = 'error';
-      if (e.codigo === 'clave') aviso('La clave no coincide con la de tu script. Revisa Ajustes.', true);
+      estadoSync = 'error'; ultimoError = e;
+      if (e.codigo === 'clave') aviso(explicarError(e), true);
     }
     sincronizando = false; pintarSync();
     if (Object.keys(pendientes).length && estadoSync === 'ok') programarSync(800);
@@ -114,7 +142,7 @@
       if (r.numeros) { numeros = r.numeros; ls.set('nbs:numeros', numeros); }
       await prepararImagenes();
       return true;
-    } catch (e) { return false; }
+    } catch (e) { ultimoError = e; return false; }
   }
   function limpio(d) { var c = Object.assign({}, d); delete c.editadoLocal; return c; }
   function guardarDoc(d) {
@@ -282,7 +310,10 @@
     app.onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
       if (b.dataset.ir) ir(b.dataset.ir);
-      else if (b.id === 'estado-sync') { if (conectado()) sincronizar(); else ir('/ajustes'); }
+      else if (b.id === 'estado-sync') {
+        if (!conectado()) ir('/ajustes');
+        else if (!sincronizando) sincronizar().then(function (ok) { aviso(ok ? '✅ Sincronizado.' : explicarError(ultimoError), !ok); });
+      }
       else if (b.dataset.nuevo) nuevo(b.dataset.nuevo);
       else if (b.dataset.filtro) { filtro = b.dataset.filtro; ls.set('nbs:filtro', filtro); $$('[data-filtro]').forEach(function (x) { x.setAttribute('aria-pressed', x === b); }); pintarLista(); }
       else if (b.dataset.acc === 'sel') { seleccionando = !seleccionando; elegidos = {}; inicio(); }
@@ -691,7 +722,7 @@
         b.disabled = true; b.textContent = 'Probando…';
         var ok = await cargarActivos();
         if (ok) { ultimaSync = 0; await sincronizar(); aviso('✅ Conectado. El sello de la tienda ya está listo.'); render(); }
-        else { aviso('No pude conectar. Revisa la dirección, la clave y que el script esté implementado para "Cualquier usuario".', true); b.disabled = false; b.textContent = 'Conectar'; }
+        else { aviso(explicarError(ultimoError), true); b.disabled = false; b.textContent = 'Conectar'; }
       } else if (b.dataset.acc === 'numeros') {
         try {
           var r = await api({ accion: 'numeros', numeros: { cotizacion: num($('#a-ncot').value) } });
@@ -756,5 +787,7 @@
   prepararImagenes();
   if (conectado()) programarSync(200);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+  // Pedir al navegador que no borre los datos guardados de la app (conexión, borradores).
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {}); } catch (e) {}
   window.__nbs = { docs: function () { return docs; }, cfg: cfg, sincronizar: sincronizar };
 })();
